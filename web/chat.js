@@ -10,10 +10,15 @@ const roleDisplay = document.getElementById("roleDisplay");
 const loginError = document.getElementById("loginError");
 const auditLogWindow = document.getElementById("auditLogWindow");
 const refreshLogsBtn = document.getElementById("refreshLogsBtn");
+const menuDropdown = document.getElementById("menuDropdown");
+const commandSelect = document.getElementById("commandSelect");
+const selectBtn = document.getElementById("selectBtn");
 
 let currentUser = null;
 let accessToken = null;
 let pendingAction = null;
+let selectedCommand = null;
+let formData = null;
 
 // Check if user is already logged in
 function checkAuth() {
@@ -42,6 +47,16 @@ function showChat() {
   // Set role badge with different colors
   roleDisplay.textContent = currentUser.role.toUpperCase();
   roleDisplay.className = `role-badge ${currentUser.role}`;
+  
+  // Display welcome message and menu
+  appendMessage("system", `Welcome ${currentUser.username}! Please select what you'd like to do.`);
+  displayMenuDropdown([
+    "1. Add a new member",
+    "2. Update a member",
+    "3. Delete a member",
+    "4. Show all members",
+    "5. Query you want to perform"
+  ]);
 }
 
 function switchTab(tabName) {
@@ -263,17 +278,20 @@ function logout() {
   accessToken = null;
   currentUser = null;
   pendingAction = null;
+  selectedCommand = null;
+  formData = null;
   chatWindow.innerHTML = "";
   auditLogWindow.innerHTML = "";
   loginError.textContent = "";
+  hideMenuDropdown();
   showLogin();
 }
 
 // Chat form handler
 chatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const message = messageInput.value.trim();
-  if (!message) {
+  const message = messageInput.value;
+  if (!message && formData === null) { // Only block if not in a form and input is empty
     return;
   }
 
@@ -284,23 +302,66 @@ chatForm.addEventListener("submit", async (event) => {
     let payload;
 
     if (pendingAction && normalizeConfirmWord(message)) {
+      console.log("DEBUG: Confirmation detected. pendingAction=", pendingAction);
       payload = {
         message,
         confirm: true,
         pending_action: pendingAction,
       };
+      console.log("DEBUG: Confirmation payload=", payload);
     } else {
+      console.log("DEBUG: Not a confirmation. pendingAction=", pendingAction, "normalizeConfirmWord=", normalizeConfirmWord(message));
       pendingAction = null;
       payload = { message };
+      
+      // Add selected command if in menu selection mode
+      if (selectedCommand) {
+        payload.selected_command = selectedCommand;
+      }
+      
+      // Add form data if collecting form
+      if (formData !== null) {
+        payload.form_data = formData;
+      }
     }
 
     const data = await sendQuery(payload);
     appendMessage("system", data.message || "Done.");
 
+    // Handle menu display
+    if (data.show_menu && data.menu_options) {
+      displayMenuDropdown(data.menu_options);
+      messageInput.value = "";
+      return;
+    } else {
+      hideMenuDropdown();
+    }
+
+    // Handle form collection
+    if (data.collecting_form) {
+      formData = data.form_data || {};
+      selectedCommand = "add"; // When collecting form, we're in add mode
+      messageInput.placeholder = "Enter the requested information";
+      messageInput.value = "";
+      return;
+    } else {
+      formData = null;
+      selectedCommand = null;
+      messageInput.placeholder = "Type a command (e.g. Show all choir members)";
+    }
+
     if (data.requires_confirmation && data.action) {
+      console.log("DEBUG: Setting pendingAction from requires_confirmation response");
       pendingAction = data.action;
+      // Clear form state when waiting for confirmation
+      formData = null;
+      selectedCommand = null;
+      messageInput.placeholder = "Type 'yes' to confirm or 'cancel' to abort";
+      messageInput.value = "";
       appendMessage("system", "Type 'yes' to confirm this action.");
       return;
+    } else {
+      console.log("DEBUG: Not setting pendingAction. requires_confirmation=", data.requires_confirmation, "action=", data.action);
     }
 
     if (data.result?.rows) {
@@ -311,10 +372,95 @@ chatForm.addEventListener("submit", async (event) => {
     if (data.result && data.action?.action !== "select") {
       appendMessage("system", JSON.stringify(data.result, null, 2));
     }
+
+    // After a successful action, reset to the main menu
+    if (data.action_completed) {
+      showChat();
+    }
   } catch (error) {
     appendMessage("system", `Error: ${error.message}`);
   }
 });
+
+// Menu dropdown handler
+selectBtn.addEventListener("click", async (event) => {
+  event.preventDefault();
+  const selectedValue = commandSelect.value;
+  
+  if (!selectedValue) {
+    appendMessage("system", "Please select a command first.");
+    return;
+  }
+
+  // Map the display text to command value
+  const commandMap = {
+    "1. Add a new member": "add",
+    "2. Update a member": "update",
+    "3. Delete a member": "delete",
+    "4. Show all members": "show",
+    "5. Query you want to perform": "query"
+  };
+  
+  const command = commandMap[selectedValue] || selectedValue;
+  selectedCommand = command;
+  
+  appendMessage("user", selectedValue);
+  hideMenuDropdown();
+  chatForm.style.display = "grid";
+  
+  // Send the selection to backend
+  try {
+    const payload = {
+      message: selectedValue,
+      selected_command: command
+    };
+    
+    const data = await sendQuery(payload);
+    appendMessage("system", data.message || "Done.");
+    
+    // Handle form collection
+    if (data.collecting_form) {
+      formData = data.form_data || {};
+      messageInput.placeholder = "Enter the requested information";
+      messageInput.value = "";
+      messageInput.focus();
+      return;
+    }
+    
+    // Handle menu display again
+    if (data.show_menu && data.menu_options) {
+      displayMenuDropdown(data.menu_options);
+      return;
+    }
+    
+    messageInput.value = "";
+    messageInput.focus();
+  } catch (error) {
+    appendMessage("system", `Error: ${error.message}`);
+  }
+});
+
+function displayMenuDropdown(options) {
+  menuDropdown.style.display = "block";
+  chatForm.style.display = "none";
+  commandSelect.innerHTML = '<option value="">Choose an action...</option>';
+  
+  options.forEach(option => {
+    const optElement = document.createElement("option");
+    optElement.value = option;
+    optElement.textContent = option;
+    commandSelect.appendChild(optElement);
+  });
+  
+  commandSelect.focus();
+}
+
+function hideMenuDropdown() {
+  menuDropdown.style.display = "none";
+  chatForm.style.display = "grid";
+  commandSelect.innerHTML = '<option value="">Choose an action...</option>';
+  messageInput.focus();
+}
 
 // Refresh logs button
 refreshLogsBtn.addEventListener("click", loadAuditLogs);

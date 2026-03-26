@@ -1,9 +1,10 @@
 from datetime import date
+from typing import Any
 
 from app.schemas import ActionPayload
 
 
-ALLOWED_FIELDS = {"member_id", "name", "phone", "ministry", "status", "join_date"}
+ALLOWED_FIELDS = {"member_id", "first_name", "last_name", "phone", "ministry", "status", "join_date", "gender", "date_of_birth", "email", "occupational"}
 WRITE_ACTIONS = {"insert", "update", "delete"}
 FORBIDDEN_TOKENS = {
     "drop",
@@ -25,7 +26,7 @@ def _contains_forbidden_token(value: str) -> bool:
 def _validate_fields(field_names: list[str]) -> None:
     for field_name in field_names:
         if field_name not in ALLOWED_FIELDS:
-            raise ValueError(f"'{field_name}' is not a valid field. Please use: name, phone, ministry, status, or join date.")
+            raise ValueError(f"'{field_name}' is not a valid field. Please use: name, phone, ministry, status, join date, gender, date of birth, email, or occupation.")
 
 
 def _validate_phone(phone: str) -> None:
@@ -46,7 +47,11 @@ def _normalize_status(data: dict) -> None:
     data["status"] = "Active" if value == "active" else "Inactive"
 
 
-def validate_action(action: ActionPayload) -> ActionPayload:
+def validate_action(action: ActionPayload | dict[str, Any]) -> ActionPayload:
+    # Convert dict to ActionPayload if needed
+    if isinstance(action, dict):
+        action = ActionPayload(**action)
+    
     if action.table != "members":
         raise ValueError("I can only work with member information right now.")
 
@@ -56,14 +61,14 @@ def validate_action(action: ActionPayload) -> ActionPayload:
     if action.filters:
         for condition in action.filters:
             if condition.field not in ALLOWED_FIELDS:
-                raise ValueError(f"I don't recognize '{condition.field}'. Please use: name, phone, ministry, status, or member ID.")
+                raise ValueError(f"I don't recognize '{condition.field}'. Please use: first_name, last_name, phone, ministry, status, or member ID.")
             if isinstance(condition.value, str) and _contains_forbidden_token(condition.value):
                 raise ValueError("The text you entered looks suspicious. Please try again with different wording.")
 
     data = dict(action.data or {})
 
     if action.action == "insert":
-        required_fields = {"name", "phone", "ministry"}
+        required_fields = {"first_name", "last_name", "phone", "ministry", "gender", "date_of_birth", "occupational"}
         if not required_fields.issubset(data.keys()):
             missing = ", ".join(sorted(required_fields - set(data.keys())))
             raise ValueError(f"Please provide the member's {missing}. These are required to add a new member.")

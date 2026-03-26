@@ -16,11 +16,16 @@ def initialize_database() -> None:
     members_table = """
     CREATE TABLE IF NOT EXISTS members (
         member_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
         phone TEXT NOT NULL,
         ministry TEXT NOT NULL,
         status TEXT NOT NULL CHECK (status IN ('Active', 'Inactive')),
-        join_date TEXT
+        join_date TEXT,
+        gender TEXT NOT NULL CHECK (gender IN ('Male', 'Female')),
+        date_of_birth TEXT NOT NULL,
+        email TEXT,
+        occupational TEXT NOT NULL
     );
     """
 
@@ -53,3 +58,8 @@ def initialize_database() -> None:
         connection.execute(users_table)
         connection.execute(audit_logs_table)
         connection.commit()
+
+
+if __name__ == "__main__":
+    initialize_database()
+    print("Database initialized successfully.")

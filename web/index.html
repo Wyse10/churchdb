@@ -62,13 +62,24 @@
       <!-- Chat Tab -->
       <div id="chatTab" class="tab-content active">
         <section id="chatWindow" class="chat-window" aria-live="polite"></section>
-        <form id="chatForm" class="chat-form">
+        
+        <!-- Menu Dropdown (hidden by default) -->
+        <div id="menuDropdown" class="menu-dropdown" style="display: none;">
+          <label for="commandSelect">Select a command:</label>
+          <select id="commandSelect" class="command-select">
+            <option value="">Choose an action...</option>
+          </select>
+          <button id="selectBtn" type="button" class="select-btn">Select</button>
+        </div>
+        
+        <!-- Chat Form (hidden when menu is shown) -->
+        <form id="chatForm" class="chat-form" style="display: none;">
           <input
             id="messageInput"
             type="text"
             placeholder="Type a command (e.g. Show all choir members)"
             autocomplete="off"
-            required
+            
           />
           <button type="submit">Send</button>
         </form>

@@ -12,6 +12,13 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 
+def detect_add_member_intent(message: str) -> bool:
+    """Detect if the user wants to add a new member."""
+    lower_msg = message.lower().strip()
+    keywords = ["add member", "new member", "register member", "add a member", "add new member", "register a member"]
+    return any(keyword in lower_msg for keyword in keywords)
+
+
 SYSTEM_PROMPT = """
 You convert church admin natural language into JSON commands.
 Return ONLY valid JSON without markdown.
@@ -19,9 +26,9 @@ Allowed JSON schema:
 {
   "action": "insert|select|update|delete",
   "table": "members",
-  "data": {"name": "", "phone": "", "ministry": "", "status": "Active|Inactive", "join_date": "YYYY-MM-DD"},
-  "filters": [{"field": "name|phone|ministry|status|member_id|join_date", "operator": "eq|neq|like|in|gt|gte|lt|lte", "value": ""}],
-  "fields": ["member_id", "name", "phone", "ministry", "status", "join_date"],
+  "data": {"first_name": "", "last_name": "", "other_name": "", "phone": "", "ministry": "", "status": "Active|Inactive", "join_date": "YYYY-MM-DD", "gender": "Male|Female", "date_of_birth": "", "occupational": "", "email": ""},
+  "filters": [{"field": "first_name|last_name|other_name|phone|ministry|status|member_id|join_date|gender|date_of_birth|occupational|email", "operator": "eq|neq|like|in|gt|gte|lt|lte", "value": ""}],
+  "fields": ["member_id", "first_name", "last_name", "other_name", "phone", "ministry", "status", "join_date", "gender", "date_of_birth", "occupational", "email"],
   "limit": 100
 }
 Rules:
@@ -63,7 +70,8 @@ def _fallback_parse(message: str) -> dict[str, Any]:
             "action": "insert",
             "table": "members",
             "data": {
-                "name": add_match.group("name").strip(),
+                "first_name": add_match.group("name").strip().split()[0],
+                "last_name": " ".join(add_match.group("name").strip().split()[1:]),
                 "phone": add_match.group("phone").strip(),
                 "ministry": ministry.strip().title() if ministry else "Member",
                 "status": "Active",
@@ -83,7 +91,7 @@ def _fallback_parse(message: str) -> dict[str, Any]:
             "data": {"phone": update_phone_match.group("phone").strip()},
             "filters": [
                 {
-                    "field": "name",
+                    "field": "first_name",
                     "operator": "like",
                     "value": update_phone_match.group("name").strip(),
                 }

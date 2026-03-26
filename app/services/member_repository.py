@@ -46,16 +46,28 @@ def execute_action(action: ActionPayload) -> dict[str, Any]:
 
         if action.action == "insert":
             data = action.data or {}
+            
+            # Ensure required fields are present
+            required_fields = ["first_name", "last_name", "phone", "ministry", "status", "gender", "date_of_birth", "occupational"]
+            for field in required_fields:
+                if field not in data or data[field] is None or str(data[field]).strip() == "":
+                    raise ValueError(f"Required field '{field}' is missing or empty")
+            
             fields = list(data.keys())
             placeholders = ", ".join(["?"] * len(fields))
             query = f"INSERT INTO members ({', '.join(fields)}) VALUES ({placeholders})"
-            cursor.execute(query, [data[field] for field in fields])
-            connection.commit()
-            return {
-                "operation": "insert",
-                "member_id": cursor.lastrowid,
-                "rows_affected": cursor.rowcount,
-            }
+            
+            try:
+                cursor.execute(query, [data[field] for field in fields])
+                connection.commit()
+                return {
+                    "operation": "insert",
+                    "member_id": cursor.lastrowid,
+                    "rows_affected": cursor.rowcount,
+                }
+            except Exception as e:
+                connection.rollback()
+                raise ValueError(f"Database error during insert: {str(e)}")
 
         if action.action == "select":
             selected_fields = ", ".join(action.fields) if action.fields else "*"
