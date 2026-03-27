@@ -57,6 +57,7 @@ class QueryResponse(BaseModel):
     form_step: str | None = None
     show_menu: bool = False
     menu_options: list[str] | None = None
+    action_completed: bool = False
 
 
 class LoginRequest(BaseModel):

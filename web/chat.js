@@ -48,6 +48,9 @@ function showChat() {
   roleDisplay.textContent = currentUser.role.toUpperCase();
   roleDisplay.className = `role-badge ${currentUser.role}`;
   
+  // Clear the chat window before displaying the welcome message
+  chatWindow.innerHTML = "";
+  
   // Display welcome message and menu
   appendMessage("system", `Welcome ${currentUser.username}! Please select what you'd like to do.`);
   displayMenuDropdown([
@@ -328,7 +331,17 @@ chatForm.addEventListener("submit", async (event) => {
     const data = await sendQuery(payload);
     appendMessage("system", data.message || "Done.");
 
-    // Handle menu display
+    // FIRST: Display results table if available (do this BEFORE showing menu)
+    if (data.result?.rows) {
+      appendTable(data.result.rows);
+    }
+
+    // Display other result data if not a select action
+    if (data.result && data.action?.action !== "select") {
+      appendMessage("system", JSON.stringify(data.result, null, 2));
+    }
+
+    // THEN: Handle menu display
     if (data.show_menu && data.menu_options) {
       displayMenuDropdown(data.menu_options);
       messageInput.value = "";
@@ -364,21 +377,22 @@ chatForm.addEventListener("submit", async (event) => {
       console.log("DEBUG: Not setting pendingAction. requires_confirmation=", data.requires_confirmation, "action=", data.action);
     }
 
-    if (data.result?.rows) {
-      appendTable(data.result.rows);
-      return;
-    }
-
-    if (data.result && data.action?.action !== "select") {
-      appendMessage("system", JSON.stringify(data.result, null, 2));
-    }
-
     // After a successful action, reset to the main menu
     if (data.action_completed) {
+      // Instead of just showing the chat, which might not reset everything,
+      // let's explicitly call the function that shows the welcome/menu.
       showChat();
+      return; // Stop further processing
+    }
+
+    // If we are not in a form and no other specific action, reset placeholder
+    if (formData === null) {
+      messageInput.placeholder = "Type a command (e.g. Show all choir members)";
     }
   } catch (error) {
     appendMessage("system", `Error: ${error.message}`);
+    // On error, also reset to a known state
+    showChat();
   }
 });
 
@@ -418,6 +432,25 @@ selectBtn.addEventListener("click", async (event) => {
     const data = await sendQuery(payload);
     appendMessage("system", data.message || "Done.");
     
+    console.log("DEBUG selectBtn response:", data);
+    console.log("DEBUG result:", data.result);
+    console.log("DEBUG result.rows:", data.result?.rows);
+    
+    // FIRST: Display results table if available (do this BEFORE showing menu)
+    if (data.result && data.result.rows && data.result.rows.length > 0) {
+      console.log("DEBUG: Displaying table with", data.result.rows.length, "rows");
+      appendTable(data.result.rows);
+    } else if (data.result && Array.isArray(data.result)) {
+      // In case result is directly an array
+      console.log("DEBUG: Result is an array, displaying table");
+      appendTable(data.result);
+    }
+    
+    // Display other result data if not a select action
+    if (data.result && data.action?.action !== "select") {
+      appendMessage("system", JSON.stringify(data.result, null, 2));
+    }
+    
     // Handle form collection
     if (data.collecting_form) {
       formData = data.form_data || {};
@@ -427,7 +460,7 @@ selectBtn.addEventListener("click", async (event) => {
       return;
     }
     
-    // Handle menu display again
+    // THEN: Handle menu display
     if (data.show_menu && data.menu_options) {
       displayMenuDropdown(data.menu_options);
       return;

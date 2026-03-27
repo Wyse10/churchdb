@@ -146,7 +146,9 @@ async def query(request: QueryRequest, current_user: dict[str, Any] = Depends(ge
                 message=f"{action.action.title()} operation completed successfully.",
                 action=action,
                 result=result,
-                action_completed=True  # Signal that the action is done
+                action_completed=True,  # Signal that the action is done
+                show_menu=True,
+                menu_options=MENU_OPTIONS
             )
         
         # If no command selected and no form in progress, show menu
@@ -246,6 +248,9 @@ async def query(request: QueryRequest, current_user: dict[str, Any] = Depends(ge
                     message="All members retrieved successfully.",
                     action=action,
                     result=result,
+                    action_completed=True,
+                    show_menu=True,
+                    menu_options=MENU_OPTIONS
                 )
             
             # Handle "Delete" command
