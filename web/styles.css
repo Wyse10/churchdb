@@ -233,6 +233,18 @@ body {
   gap: 1rem;
 }
 
+.chat-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.chat-header .refresh-btn {
+  margin-top: 0;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.95rem;
+}
+
 /* Chat Window and Form */
 .chat-window {
   background: rgba(255, 255, 255, 0.97);

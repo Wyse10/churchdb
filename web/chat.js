@@ -5,6 +5,7 @@ const chatWindow = document.getElementById("chatWindow");
 const chatForm = document.getElementById("chatForm");
 const messageInput = document.getElementById("messageInput");
 const logoutBtn = document.getElementById("logoutBtn");
+const refreshChatBtn = document.getElementById("refreshChatBtn");
 const userDisplay = document.getElementById("userDisplay");
 const roleDisplay = document.getElementById("roleDisplay");
 const loginError = document.getElementById("loginError");
@@ -268,12 +269,13 @@ loginForm.addEventListener("submit", async (event) => {
     loginForm.reset();
     showChat();
   } catch (error) {
-    loginError.textContent = "An error occurred during login";
+    loginError.textContent = "Cannot reach server. Start uvicorn and open http://127.0.0.1:8000 in your browser.";
   }
 });
 
 // Logout handler
 logoutBtn.addEventListener("click", logout);
+
 
 function logout() {
   localStorage.removeItem("accessToken");
@@ -288,6 +290,17 @@ function logout() {
   loginError.textContent = "";
   hideMenuDropdown();
   showLogin();
+}
+
+function refreshChat() {
+  console.log("Refresh button clicked");
+  pendingAction = null;
+  selectedCommand = null;
+  formData = null;
+  chatWindow.innerHTML = "";
+  hideMenuDropdown();
+  showChat();
+  console.log("Chat refreshed");
 }
 
 // Chat form handler
@@ -499,6 +512,11 @@ function hideMenuDropdown() {
 
 // Refresh logs button
 refreshLogsBtn.addEventListener("click", loadAuditLogs);
+
+// Refresh chat button
+if (refreshChatBtn) {
+  refreshChatBtn.addEventListener("click", refreshChat);
+}
 
 // Initialize app
 checkAuth();
