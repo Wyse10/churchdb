@@ -57,6 +57,12 @@ def login(request: LoginRequest) -> LoginResponse:
 @router.post("/users")
 def create_new_user(request: UserCreate, current_user: dict[str, Any] = Depends(require_admin)) -> dict[str, str]:
     """Create a new user (admin only)."""
+    if request.role != "operator":
+        raise HTTPException(
+            status_code=403,
+            detail="Administrators can only create operator accounts.",
+        )
+
     if create_user(request.username, request.password, request.role):
         return {"message": f"User {request.username} has been created successfully."}
     else:

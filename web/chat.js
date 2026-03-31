@@ -14,6 +14,11 @@ const refreshLogsBtn = document.getElementById("refreshLogsBtn");
 const menuDropdown = document.getElementById("menuDropdown");
 const commandSelect = document.getElementById("commandSelect");
 const selectBtn = document.getElementById("selectBtn");
+const createOperatorBtn = document.getElementById("createOperatorBtn");
+const operatorPanel = document.getElementById("operatorPanel");
+const operatorForm = document.getElementById("operatorForm");
+const cancelOperatorBtn = document.getElementById("cancelOperatorBtn");
+const operatorStatus = document.getElementById("operatorStatus");
 
 let currentUser = null;
 let accessToken = null;
@@ -38,6 +43,9 @@ function showLogin() {
   loginSection.style.display = "block";
   chatSection.style.display = "none";
   chatWindow.innerHTML = "";
+  operatorPanel.style.display = "none";
+  operatorStatus.textContent = "";
+  operatorStatus.style.color = "";
 }
 
 function showChat() {
@@ -48,6 +56,14 @@ function showChat() {
   // Set role badge with different colors
   roleDisplay.textContent = currentUser.role.toUpperCase();
   roleDisplay.className = `role-badge ${currentUser.role}`;
+
+  // Only admins can access operator account creation.
+  if (currentUser.role === "admin") {
+    createOperatorBtn.style.display = "inline-flex";
+  } else {
+    createOperatorBtn.style.display = "none";
+    operatorPanel.style.display = "none";
+  }
   
   // Clear the chat window before displaying the welcome message
   chatWindow.innerHTML = "";
@@ -303,6 +319,15 @@ function refreshChat() {
   console.log("Chat refreshed");
 }
 
+function toggleOperatorPanel(show) {
+  operatorPanel.style.display = show ? "block" : "none";
+  if (!show) {
+    operatorForm.reset();
+    operatorStatus.textContent = "";
+    operatorStatus.style.color = "";
+  }
+}
+
 // Chat form handler
 chatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -508,6 +533,73 @@ function hideMenuDropdown() {
   chatForm.style.display = "grid";
   commandSelect.innerHTML = '<option value="">Choose an action...</option>';
   messageInput.focus();
+}
+
+if (createOperatorBtn) {
+  createOperatorBtn.addEventListener("click", () => {
+    if (currentUser?.role !== "admin") {
+      return;
+    }
+
+    toggleOperatorPanel(true);
+  });
+}
+
+if (cancelOperatorBtn) {
+  cancelOperatorBtn.addEventListener("click", () => {
+    toggleOperatorPanel(false);
+  });
+}
+
+if (operatorForm) {
+  operatorForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    if (currentUser?.role !== "admin") {
+      operatorStatus.style.color = "#dc2626";
+      operatorStatus.textContent = "Only administrators can create operator accounts.";
+      return;
+    }
+
+    const username = document.getElementById("operatorUsername").value.trim();
+    const password = document.getElementById("operatorPassword").value;
+
+    if (!username || !password) {
+      operatorStatus.style.color = "#dc2626";
+      operatorStatus.textContent = "Please enter both username and password.";
+      return;
+    }
+
+    operatorStatus.style.color = "";
+    operatorStatus.textContent = "";
+
+    try {
+      const response = await fetch("/auth/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ username, password, role: "operator" }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        operatorStatus.style.color = "#dc2626";
+        operatorStatus.textContent = data.detail || "Failed to create operator account.";
+        return;
+      }
+
+      operatorStatus.style.color = "#166534";
+      operatorStatus.textContent = data.message || "Operator account created successfully.";
+      appendMessage("system", `Operator account '${username}' created successfully.`);
+      operatorForm.reset();
+    } catch (error) {
+      operatorStatus.style.color = "#dc2626";
+      operatorStatus.textContent = "Cannot reach server. Please try again.";
+    }
+  });
 }
 
 // Refresh logs button

@@ -193,6 +193,31 @@ body {
   background: #e5e7eb;
 }
 
+.operator-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid #d4af37;
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.operator-panel h2 {
+  margin: 0 0 1rem;
+  font-size: 1.2rem;
+  color: #3d3d3d;
+}
+
+.operator-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.operator-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 /* Tabs */
 .tabs {
   display: flex;

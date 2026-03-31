@@ -48,10 +48,30 @@
             <span id="userDisplay"></span>
             <span id="roleDisplay" class="role-badge"></span>
           </div>
+          <button id="createOperatorBtn" class="audit-btn" style="display: none;">Create Operator</button>
           <button id="auditLogBtn" class="audit-btn" title="View activity log">📝 Logs</button>
           <button id="logoutBtn" class="logout-btn">Logout</button>
         </div>
       </header>
+
+      <section id="operatorPanel" class="operator-panel" style="display: none;">
+        <h2>Create Operator Account</h2>
+        <form id="operatorForm" class="operator-form">
+          <div class="form-group">
+            <label for="operatorUsername">Username:</label>
+            <input id="operatorUsername" type="text" placeholder="Operator username" required />
+          </div>
+          <div class="form-group">
+            <label for="operatorPassword">Password:</label>
+            <input id="operatorPassword" type="password" placeholder="Operator password" required />
+          </div>
+          <div class="operator-actions">
+            <button type="submit" class="login-btn">Create Operator</button>
+            <button id="cancelOperatorBtn" type="button" class="logout-btn">Cancel</button>
+          </div>
+          <p id="operatorStatus" class="error-message"></p>
+        </form>
+      </section>
 
       <!-- Tabs -->
       <div class="tabs">
