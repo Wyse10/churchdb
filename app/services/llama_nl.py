@@ -12,6 +12,33 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 
+def _parse_occupation_select(message: str) -> dict[str, Any] | None:
+    text = message.strip()
+    occupation_query_pattern = re.compile(
+        r"(?:show|list|view|get|find)\s+(?:all\s+)?(?:members?|member)\s+(?:that\s+are|who\s+are|with\s+occupation\s+)?(?P<occupation>[a-zA-Z\s]+)",
+        re.IGNORECASE,
+    )
+    occupation_match = occupation_query_pattern.search(text)
+    if not occupation_match:
+        return None
+
+    occupation_value = occupation_match.group("occupation").strip().title()
+    occupation_aliases = {
+        "Student": "Student",
+        "Students": "Student",
+    }
+    normalized_occupation = occupation_aliases.get(occupation_value, occupation_value)
+
+    return {
+        "action": "select",
+        "table": "members",
+        "filters": [
+            {"field": "occupational", "operator": "like", "value": normalized_occupation}
+        ],
+        "limit": 100,
+    }
+
+
 def detect_add_member_intent(message: str) -> bool:
     """Detect if the user wants to add a new member."""
     lower_msg = message.lower().strip()
@@ -57,6 +84,10 @@ def _extract_json_block(text: str) -> str:
 def _fallback_parse(message: str) -> dict[str, Any]:
     text = message.strip()
     lower = text.lower()
+
+    occupation_select = _parse_occupation_select(message)
+    if occupation_select:
+        return occupation_select
 
     add_pattern = re.compile(
         r"add\s+(?:(?:a\s+)?(?:new\s+)?member\s+)?(?P<name>[a-zA-Z\s\.\'-]+?)\s+(?:with\s+)?phone\s+(?P<phone>[0-9+\-\s]+)(?:\s+in\s+(?:the\s+)?(?P<ministry>[a-zA-Z\s]+))?",
@@ -121,6 +152,11 @@ def _fallback_parse(message: str) -> dict[str, Any]:
 
 
 async def parse_natural_language(message: str) -> ActionPayload:
+    # Apply deterministic parsing for common occupation-based select requests.
+    occupation_select = _parse_occupation_select(message)
+    if occupation_select:
+        return ActionPayload.model_validate(occupation_select)
+
     api_key = os.getenv("GROQ_API_KEY")
 
     if not api_key:

@@ -353,7 +353,6 @@ chatForm.addEventListener("submit", async (event) => {
     // Handle form collection
     if (data.collecting_form) {
       formData = data.form_data || {};
-      selectedCommand = "add"; // When collecting form, we're in add mode
       messageInput.placeholder = "Enter the requested information";
       messageInput.value = "";
       return;
@@ -417,6 +416,9 @@ selectBtn.addEventListener("click", async (event) => {
   
   const command = commandMap[selectedValue] || selectedValue;
   selectedCommand = command;
+  
+  // Clear chat for a fresh start with new command
+  chatWindow.innerHTML = "";
   
   appendMessage("user", selectedValue);
   hideMenuDropdown();

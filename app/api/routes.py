@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Any
 import json
 import traceback
+from datetime import datetime
 
 from app.schemas import QueryRequest, QueryResponse, ActionPayload
 from app.services.action_validator import is_write_action, validate_action
@@ -196,7 +197,18 @@ async def query(request: QueryRequest, current_user: dict[str, Any] = Depends(ge
                     if request.message.strip() or not next_step.get("optional"):
                         next_step = get_next_form_step(form_data)
                         if next_step:
-                            form_data[next_step["field"]] = request.message.strip()
+                            incoming_value = request.message.strip()
+                            if next_step["field"] in ["date_of_birth", "join_date"] and incoming_value:
+                                try:
+                                    datetime.strptime(incoming_value, "%Y-%m-%d")
+                                except ValueError:
+                                    return QueryResponse(
+                                        message=f"Invalid date format for {next_step['field']}. Use YYYY-MM-DD (example: 2001-11-20).",
+                                        collecting_form=True,
+                                        form_data=form_data,
+                                        form_step=next_step["field"],
+                                    )
+                            form_data[next_step["field"]] = incoming_value
                     
                     if is_form_complete(form_data):
                         action_dict = build_action_from_form(form_data)
@@ -261,26 +273,140 @@ async def query(request: QueryRequest, current_user: dict[str, Any] = Depends(ge
                         detail="You don't have permission to delete members. Please contact an administrator."
                     )
                 
-                # Ask for member identifier to delete
-                if request.message.strip():
-                    # User provided a name to delete
-                    action = validate_action({
-                        "action": "delete",
-                        "table": "members",
-                        "filters": [{"field": "first_name", "operator": "like", "value": request.message.strip()}],
-                    })
-                    
+                # Start delete form if no form data exists
+                if request.form_data is None:
                     return QueryResponse(
-                        message=f"Are you sure you want to delete member '{request.message.strip()}'? Please reply 'confirm' or 'yes' to proceed.",
-                        action=action,
-                        requires_confirmation=True,
-                        result={"preview": action.model_dump()},
+                        message="Do you want to delete all members or a particular member? (Type 'all' or 'particular')",
+                        collecting_form=True,
+                        form_data={},
+                        form_step="delete_scope",
                     )
                 else:
-                    return QueryResponse(
-                        message="Please enter the name or ID of the member you want to delete.",
-                        show_menu=False,
-                    )
+                    # Continue with delete form collection
+                    form_data = request.form_data.copy()
+                    
+                    # Step 1: Get scope (all or particular)
+                    if "delete_scope" not in form_data:
+                        scope = request.message.strip().lower()
+                        
+                        if scope not in ["all", "particular"]:
+                            return QueryResponse(
+                                message="Invalid choice. Please type 'all' to delete all members or 'particular' to delete a specific member.",
+                                collecting_form=True,
+                                form_data=form_data,
+                                form_step="delete_scope",
+                            )
+                        
+                        form_data["delete_scope"] = scope
+                        
+                        if scope == "all":
+                            # Build action to delete all members
+                            action_dict = {
+                                "action": "delete",
+                                "table": "members",
+                                "filters": []
+                            }
+                            action = validate_action(action_dict)
+                            
+                            return QueryResponse(
+                                message="WARNING: You are about to delete ALL members. This action cannot be undone. \n\nPlease confirm by typing 'confirm' or 'yes'.",
+                                action=action,
+                                requires_confirmation=True,
+                                result={"preview": action_dict},
+                                collecting_form=False,
+                                form_data=None,
+                            )
+                        else:
+                            # Ask for specific member identity fields
+                            return QueryResponse(
+                                message="Enter the first name of the member you want to delete:",
+                                collecting_form=True,
+                                form_data=form_data,
+                                form_step="first_name",
+                            )
+                    
+                    # Step 2: Capture first name for particular delete
+                    elif form_data.get("delete_scope") == "particular" and "first_name" not in form_data:
+                        first_name = request.message.strip()
+                        if not first_name:
+                            return QueryResponse(
+                                message="First name is required. Enter the first name of the member you want to delete:",
+                                collecting_form=True,
+                                form_data=form_data,
+                                form_step="first_name",
+                            )
+
+                        form_data["first_name"] = first_name
+                        return QueryResponse(
+                            message="Enter the last name of the member you want to delete:",
+                            collecting_form=True,
+                            form_data=form_data,
+                            form_step="last_name",
+                        )
+
+                    # Step 3: Capture last name for particular delete
+                    elif form_data.get("delete_scope") == "particular" and "last_name" not in form_data:
+                        last_name = request.message.strip()
+                        if not last_name:
+                            return QueryResponse(
+                                message="Last name is required. Enter the last name of the member you want to delete:",
+                                collecting_form=True,
+                                form_data=form_data,
+                                form_step="last_name",
+                            )
+
+                        form_data["last_name"] = last_name
+                        return QueryResponse(
+                            message="Enter the date of birth (YYYY-MM-DD):",
+                            collecting_form=True,
+                            form_data=form_data,
+                            form_step="date_of_birth",
+                        )
+
+                    # Step 4: Capture DOB and build delete action for particular member
+                    elif form_data.get("delete_scope") == "particular" and "date_of_birth" not in form_data:
+                        date_of_birth = request.message.strip()
+                        if not date_of_birth:
+                            return QueryResponse(
+                                message="Date of birth is required. Enter the date of birth (YYYY-MM-DD):",
+                                collecting_form=True,
+                                form_data=form_data,
+                                form_step="date_of_birth",
+                            )
+
+                        # Enforce strict date format for safer record matching.
+                        try:
+                            datetime.strptime(date_of_birth, "%Y-%m-%d")
+                        except ValueError:
+                            return QueryResponse(
+                                message="Invalid date format. Enter date of birth as YYYY-MM-DD (example: 2001-11-20).",
+                                collecting_form=True,
+                                form_data=form_data,
+                                form_step="date_of_birth",
+                            )
+
+                        form_data["date_of_birth"] = date_of_birth
+
+                        action_dict = {
+                            "action": "delete",
+                            "table": "members",
+                            "filters": [
+                                {"field": "first_name", "operator": "eq", "value": form_data["first_name"]},
+                                {"field": "last_name", "operator": "eq", "value": form_data["last_name"]},
+                                {"field": "date_of_birth", "operator": "eq", "value": form_data["date_of_birth"]},
+                            ],
+                        }
+                        action = validate_action(action_dict)
+
+                        member_label = f"{form_data['first_name']} {form_data['last_name']} ({form_data['date_of_birth']})"
+                        return QueryResponse(
+                            message=f"Are you sure you want to delete member '{member_label}'? Please confirm by typing 'confirm' or 'yes'.",
+                            action=action,
+                            requires_confirmation=True,
+                            result={"preview": action_dict},
+                            collecting_form=False,
+                            form_data=None,
+                        )
             
             # Handle "Update" command
             elif command == "update":
@@ -290,16 +416,139 @@ async def query(request: QueryRequest, current_user: dict[str, Any] = Depends(ge
                         detail="You don't have permission to update members."
                     )
                 
-                return QueryResponse(
-                    message="Please provide details about what you want to update (e.g., 'update John Smith phone to 024123456' or 'update Sarah status to Inactive').",
-                    show_menu=False,
-                )
+                # Start update form if no form data exists
+                if request.form_data is None:
+                    return QueryResponse(
+                        message="Enter the first name of the member you want to update:",
+                        collecting_form=True,
+                        form_data={},
+                        form_step="member_name",
+                    )
+                else:
+                    # Continue with update form collection
+                    form_data = request.form_data.copy()
+                    
+                    # Step 1: Get member name
+                    if "member_name" not in form_data:
+                        form_data["member_name"] = request.message.strip()
+                        return QueryResponse(
+                            message="Which field would you like to update? (phone, ministry, status, email, occupational, gender, date_of_birth)",
+                            collecting_form=True,
+                            form_data=form_data,
+                            form_step="field_to_update",
+                        )
+                    
+                    # Step 2: Get field to update
+                    elif "field_to_update" not in form_data:
+                        field = request.message.strip().lower()
+                        valid_fields = ["phone", "ministry", "status", "email", "occupational", "gender", "date_of_birth"]
+                        
+                        if field not in valid_fields:
+                            return QueryResponse(
+                                message=f"Invalid field. Please choose from: {', '.join(valid_fields)}",
+                                collecting_form=True,
+                                form_data=form_data,
+                                form_step="field_to_update",
+                            )
+                        
+                        form_data["field_to_update"] = field
+                        return QueryResponse(
+                            message=f"Enter the new value for {field}:",
+                            collecting_form=True,
+                            form_data=form_data,
+                            form_step="new_value",
+                        )
+                    
+                    # Step 3: Get new value and build action
+                    elif "new_value" not in form_data:
+                        new_value_input = request.message.strip()
+                        if form_data.get("field_to_update") == "date_of_birth":
+                            try:
+                                datetime.strptime(new_value_input, "%Y-%m-%d")
+                            except ValueError:
+                                return QueryResponse(
+                                    message="Invalid date format. Enter date_of_birth as YYYY-MM-DD (example: 2001-11-20).",
+                                    collecting_form=True,
+                                    form_data=form_data,
+                                    form_step="new_value",
+                                )
+
+                        form_data["new_value"] = new_value_input
+                        
+                        # Build the update action
+                        member_name = form_data["member_name"]
+                        field_to_update = form_data["field_to_update"]
+                        new_value = form_data["new_value"]
+                        
+                        action_dict = {
+                            "action": "update",
+                            "table": "members",
+                            "data": {field_to_update: new_value},
+                            "filters": [{"field": "first_name", "operator": "like", "value": member_name}]
+                        }
+                        
+                        action = validate_action(action_dict)
+                        summary = f"Update {member_name}'s {field_to_update} to: {new_value}"
+                        
+                        return QueryResponse(
+                            message=f"{summary}\n\nPlease confirm by typing 'confirm' or 'yes'.",
+                            action=action,
+                            requires_confirmation=True,
+                            result={"preview": action_dict},
+                            collecting_form=False,
+                            form_data=None,
+                        )
             
             # Handle "Query" command
             elif command == "query":
+                query_text = request.message.strip()
+                if query_text in ["", "5", "5. Query you want to perform", "query"]:
+                    return QueryResponse(
+                        message="Please describe what information you're looking for or what action you'd like to perform.",
+                        show_menu=False,
+                    )
+
+                action = await parse_natural_language(query_text)
+                action = validate_action(action)
+
+                if action.action == "delete" and current_user.get("role") != "admin":
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You don't have permission to delete members. Please contact an administrator."
+                    )
+
+                if action.action in ["insert", "update"] and current_user.get("role") not in ["admin", "operator"]:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You don't have permission to add or update members."
+                    )
+
+                if is_write_action(action):
+                    return QueryResponse(
+                        message="Please confirm this write action before execution.",
+                        action=action,
+                        requires_confirmation=True,
+                        result={"preview": action.model_dump()},
+                    )
+
+                result = execute_action(action)
+
+                if action.action == "select":
+                    log_action(
+                        user_id=current_user.get("user_id"),
+                        username=current_user.get("username"),
+                        action="QUERY",
+                        table_name=action.table,
+                        details=json.dumps(action.model_dump())
+                    )
+
                 return QueryResponse(
-                    message="Please describe what information you're looking for or what action you'd like to perform.",
-                    show_menu=False,
+                    message="Query executed successfully.",
+                    action=action,
+                    result=result,
+                    action_completed=True,
+                    show_menu=True,
+                    menu_options=MENU_OPTIONS,
                 )
         
         # Handle form-based member addition
@@ -309,7 +558,18 @@ async def query(request: QueryRequest, current_user: dict[str, Any] = Depends(ge
             if request.message.strip() or not next_step.get("optional"):
                 next_step = get_next_form_step(form_data)
                 if next_step:
-                    form_data[next_step["field"]] = request.message.strip()
+                    incoming_value = request.message.strip()
+                    if next_step["field"] in ["date_of_birth", "join_date"] and incoming_value:
+                        try:
+                            datetime.strptime(incoming_value, "%Y-%m-%d")
+                        except ValueError:
+                            return QueryResponse(
+                                message=f"Invalid date format for {next_step['field']}. Use YYYY-MM-DD (example: 2001-11-20).",
+                                collecting_form=True,
+                                form_data=form_data,
+                                form_step=next_step["field"],
+                            )
+                    form_data[next_step["field"]] = incoming_value
             
             if is_form_complete(form_data):
                 action_dict = build_action_from_form(form_data)
